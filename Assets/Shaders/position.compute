@@ -1,0 +1,300 @@
+﻿#pragma kernel UpdateParticles
+#pragma kernel ClearGrid
+#pragma kernel UpdateGrid
+#pragma kernel UpdateParticlesForces
+#pragma kernel AddParticlesForcesToBody
+#pragma kernel UpdateBody
+#include "Common.hlsl"
+
+RWStructuredBuffer<float4> TransformBuffer;
+
+RWStructuredBuffer<float4> particlePosLocalBuffer;
+RWStructuredBuffer<float4> bodyPosBuffer;
+RWStructuredBuffer<float4> bodyQuatBuffer;
+RWStructuredBuffer<float4> bodyVelBuffer;
+RWStructuredBuffer<float4> bodyForceBuffer;
+RWStructuredBuffer<float4> bodyTorqueBuffer;
+RWStructuredBuffer<float4> bodyAngularVelBuffer;
+RWStructuredBuffer<float4> bodyMassBuffer;
+RWStructuredBuffer<float4> particlePosWorldBuffer;
+RWStructuredBuffer<float4> particlePosRelativeBuffer;
+RWStructuredBuffer<float4> particleVelocityBuffer;
+RWStructuredBuffer<float4> particleForceBuffer;
+RWStructuredBuffer<float4> particleTorqueBuffer;
+RWStructuredBuffer<int4> gridBuffer;
+
+CBUFFER_START(Params)
+    uint2 Iteration;
+
+    float friction;
+    float drag;
+    float stiffness;
+    float damping;
+    float radius;
+    float deltaTime;
+    float time;
+    float3 interactionSpherePos;
+    float interactionSphereRadius;
+    float linearAngular;
+    float3 gravity;
+    float3 maxVelocity;
+
+    float3 cellSize;
+    float3 gridPos;
+    float3 gridResolution;
+    float2 gridTextureResolution;
+    float3 boxSize;
+CBUFFER_END
+
+[numthreads(128, 1, 1)]
+void UpdateParticles (uint id : SV_DispatchThreadID)
+{
+	if (id >= Iteration.x * Iteration.y) return;
+	float4 particlePosAndBodyId = particlePosLocalBuffer[id];
+	float3 particlePos = particlePosAndBodyId.xyz;
+
+	uint bodyIndex = particlePosAndBodyId.w;
+	float3 bodyPos = bodyPosBuffer[bodyIndex].xyz;
+	float4 bodyQuat = bodyQuatBuffer[bodyIndex];
+
+	float3 worldParticlePos = float3_applyQuat(particlePos, bodyQuat) + bodyPos;
+    particlePosWorldBuffer[id] = float4(worldParticlePos, bodyIndex);
+
+	float3 relativeParticlePos = float3_applyQuat(particlePos, bodyQuat);
+    particlePosRelativeBuffer[id] = float4(relativeParticlePos,bodyIndex);
+
+	float3 bodyVelocity = bodyVelBuffer[bodyIndex].xyz;
+	float3 bodyAngularVelocity = bodyAngularVelBuffer[bodyIndex].xyz;
+	particleVelocityBuffer[id] = float4(bodyVelocity - cross(relativeParticlePos, bodyAngularVelocity),1.0);
+}
+
+[numthreads(128,1,1)]
+void ClearGrid (uint id : SV_DispatchThreadID)
+{
+    if (id >= Iteration.x * Iteration.y) return;
+    gridBuffer[id] = int4(-1,-1,-1,-1);
+    
+}
+
+[numthreads(128,1,1)]
+void UpdateGrid (uint id : SV_DispatchThreadID)
+{
+    if (id >= Iteration.x * Iteration.y) return;
+    int p_id = id;
+    float3 particlePos = particlePosWorldBuffer[id].xyz;
+	int gridIndex = _gridIndex(particlePos, gridPos, cellSize,gridResolution);
+    int gridMax=gridResolution.x*gridResolution.y*gridResolution.z;
+	// clamp gridIndex?
+	if (gridIndex < gridMax && gridIndex > -1)
+	{
+		
+		int originalValue = 0;
+		InterlockedCompareExchange(gridBuffer[gridIndex].x, -1, p_id, originalValue);
+		if (originalValue != -1)
+			InterlockedCompareExchange(gridBuffer[gridIndex].y, -1, p_id, originalValue);
+		if (originalValue != -1)
+			InterlockedCompareExchange(gridBuffer[gridIndex].z, -1, p_id, originalValue);
+		if (originalValue != -1)
+			InterlockedCompareExchange(gridBuffer[gridIndex].w, -1, p_id, originalValue);
+	}
+}
+
+
+
+float3 particleForce(float STIFFNESS, float DAMPING, float DAMPING_T, float distance, float minDistance, float3 xi, float3 xj, float3 vi, float3 vj){
+    float3 rij = xj - xi;
+    float3 rij_unit = normalize(rij);
+    float3 vij = vj - vi;
+    float3 vij_t = vij - dot(vij, rij_unit) * rij_unit;
+    float3 springForce = - STIFFNESS * (distance - max(length(rij), minDistance)) * rij_unit;
+    float3 dampingForce = DAMPING * dot(vij,rij_unit) * rij_unit;
+    float3 tangentForce = DAMPING_T * vij_t;
+    return springForce + dampingForce + tangentForce;
+}
+
+[numthreads(128, 1, 1)]
+void UpdateParticlesForces(uint id : SV_DispatchThreadID)
+{
+    if (id >= Iteration.x * Iteration.y) return;
+    // Get id and position of current
+    float4 positionAndBodyId = particlePosWorldBuffer[id];
+    float3 position = positionAndBodyId.xyz;
+    uint bodyId = positionAndBodyId.w;
+    float3 velocity = particleVelocityBuffer[id].xyz;
+    float3 particleGridPos = worldPosToGridPos(position, gridPos, cellSize);
+    float3 bodyAngularVelocity = bodyAngularVelBuffer[bodyId].xyz;
+
+    // Get local particle position
+    float4 relativePositionAndBodyId = particlePosRelativeBuffer[id];
+    float3 relativePosition = relativePositionAndBodyId.xyz;
+
+    float3 force = float3(0.0,0.0,0.0);
+    float3 torque = float3(0.0,0.0,0.0);
+    int3 iGridRes = int3(gridResolution.x,gridResolution.y,gridResolution.z);
+
+    // Neighbor collisions
+    for(int i=-1; i<2; i++){
+        for(int j=-1; j<2; j++){
+            for(int k=-1; k<2; k++){
+                float3 neighborCellGridPos = particleGridPos + float3(i,j,k);
+
+                for(int l=0; l<4; l++){
+                    uint neighborCellTexUV = gridPosToGridBuffer(neighborCellGridPos, l, gridResolution, gridTextureResolution);
+                    int neighborIndex = gridBuffer[neighborCellTexUV][l]; // indices are stored incremented by 1
+                    float4 neighborPositionAndBodyId = particlePosWorldBuffer[neighborIndex];
+                    float3 neighborPosition = neighborPositionAndBodyId.xyz;
+                    uint neighborBodyId = neighborPositionAndBodyId.w;
+                    float3 neighborAngularVelocity = bodyAngularVelBuffer[neighborBodyId].xyz;
+                    float3 neighborVelocity = particleVelocityBuffer[neighborIndex].xyz;
+                    float3 neighborRelativePosition = particlePosRelativeBuffer[neighborIndex].xyz;
+                    if(neighborIndex >=0 && neighborIndex != id && neighborBodyId != bodyId && neighborCellGridPos.x>=0 && neighborCellGridPos.y>=0 && neighborCellGridPos.z>=0 && neighborCellGridPos.x<iGridRes.x && neighborCellGridPos.y<iGridRes.y && neighborCellGridPos.z<iGridRes.z){ // Not self!
+                        // Apply contact force from neighbor
+                        float3 r = position - neighborPosition;
+                        float len = length(r);
+                        if(len > 0.0 && len < (radius * 2.0)){
+                            float3 dir = normalize(r);
+                            float3 v = velocity - cross(relativePosition + radius * dir, bodyAngularVelocity);
+                            float3 nv = neighborVelocity - cross(neighborRelativePosition + radius * (-dir), neighborAngularVelocity);
+                            force += particleForce(stiffness, damping, friction, 2.0 * radius, radius, position, neighborPosition, v, nv);
+
+                            //new
+                            float3 relVel = (velocity - cross(relativePosition + radius * dir, bodyAngularVelocity)) - (neighborVelocity - cross(neighborRelativePosition + radius * (-dir), neighborAngularVelocity));
+                            float3 relTangentVel = relVel - dot(relVel, dir) * dir;
+                            torque += friction * cross(relativePosition + radius * dir, relTangentVel);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+      
+    // Apply force from ground / bounds
+    float3 boxMin = float3(-boxSize.x, 0.0, -boxSize.z);
+    float3 boxMax = float3(boxSize.x, boxSize.y*0.5, boxSize.z);
+    float3 dirs[3];
+    dirs[0] = float3(1.0,0.0,0.0);
+    dirs[1] = float3(0.0,1.0,0.0);
+    dirs[2] = float3(0.0,0.0,1.0);
+    for(int ii=0; ii<3; ii++){ 
+        float3 dir = dirs[ii];
+        float3 v = velocity - cross(relativePosition + radius * dir, bodyAngularVelocity);
+        float3 tangentVel = v - dot(v,dir) * dir;
+        float x = dot(dir,position) - radius;
+        if(x < boxMin[ii]){
+            force += -( stiffness * (x - boxMin[ii]) * dir + damping * dot(v,dir) * dir);
+            force -= friction * tangentVel;
+        }
+        x = dot(dir,position) + radius;
+        if(x > boxMax[ii]){
+            dir = -dir;
+            force -= -( stiffness * (x - boxMax[ii]) * dir - damping * dot(v,dir) * dir);
+            force -= friction * tangentVel;
+        }
+
+        //new
+        float3 v2 = velocity - cross(relativePosition + radius * dir, bodyAngularVelocity);
+        if(dot(dir,position) - radius < boxMin[ii]){
+            float3 relTangentVel = (v2 - dot(v2, dir) * dir);
+            torque += friction * cross(relativePosition + radius * dir, relTangentVel);
+        }
+        if(dot(dir,position) + radius > boxMax[ii]){
+            dir = -dir;
+            float3 relTangentVel = v2 - dot(v2, dir) * dir;
+            torque += friction * cross(relativePosition + radius * dir, relTangentVel);
+        }
+    }
+       
+    // Sphere interaction
+    float3 r = position - interactionSpherePos;
+    float len = length(r);
+    if(len > 0.0 && len < interactionSphereRadius+radius){
+        force += particleForce(stiffness, damping, friction, radius + interactionSphereRadius, interactionSphereRadius, position, interactionSpherePos, velocity, float3(0.0,0.0,0.0));
+    }
+    particleForceBuffer[id] = float4(force, 1.0);
+    //new
+    particleTorqueBuffer[id] = float4(torque, 0.0);
+}
+
+[numthreads(128, 1, 1)]
+void AddParticlesForcesToBody(uint id : SV_DispatchThreadID) {
+    if (id >= Iteration.x * Iteration.y) return;
+    int p_id = id * 4;
+    float4 force = particleForceBuffer[p_id];
+
+    //new
+    float3 particleTorque = particleTorqueBuffer[p_id].xyz;
+    float3 relativeParticlePos = particlePosRelativeBuffer[p_id].xyz;
+    float3 torque = particleTorque + cross(relativeParticlePos, particleForceBuffer[p_id].xyz);
+
+    p_id++;
+    force += particleForceBuffer[p_id];
+
+    //new
+    particleTorque = particleTorqueBuffer[p_id].xyz;
+    relativeParticlePos = particlePosRelativeBuffer[p_id].xyz;
+    torque += particleTorque + cross(relativeParticlePos, particleForceBuffer[p_id].xyz);
+
+    p_id++;
+    force += particleForceBuffer[p_id];
+
+    //new
+    particleTorque = particleTorqueBuffer[p_id].xyz;
+    relativeParticlePos = particlePosRelativeBuffer[p_id].xyz;
+    torque += particleTorque + cross(relativeParticlePos, particleForceBuffer[p_id].xyz);
+
+    p_id++;
+    force += particleForceBuffer[p_id];
+    
+    //new
+    particleTorque = particleTorqueBuffer[p_id].xyz;
+    relativeParticlePos = particlePosRelativeBuffer[p_id].xyz;
+    torque += particleTorque + cross(relativeParticlePos, particleForceBuffer[p_id].xyz);
+    
+    bodyForceBuffer[id] = force;
+
+    //new
+    bodyTorqueBuffer[id] = float4(torque,1.0);
+}
+
+// Update body velocity - should work for both linear and angular
+
+[numthreads(128, 1, 1)]
+void UpdateBody(uint id : SV_DispatchThreadID) {
+    if (id >= Iteration.x * Iteration.y) return;
+    float4 velocity = bodyVelBuffer[id];
+    float4 force = bodyForceBuffer[id];
+    float4 quat = bodyQuatBuffer[id];
+    float4 massProps = bodyMassBuffer[id];
+    float3 newVelocity = velocity.xyz;
+    float invMass = massProps.w;
+    newVelocity += (force.xyz + gravity) * deltaTime * invMass;
+    newVelocity = clamp(newVelocity, -maxVelocity, maxVelocity);
+
+    // Apply damping
+    newVelocity *= pow(1.0 - drag, deltaTime);
+
+    bodyVelBuffer[id] = float4(newVelocity, 1.0);
+
+
+    //new 
+    //UpdateBodyAngularVelocity
+    float4 angularVelocity = bodyAngularVelBuffer[id];
+    float4 torqueForce = bodyTorqueBuffer[id];
+    float3 newAngularVelocity = angularVelocity.xyz;
+    float3 invInertia = massProps.xyz;
+    newAngularVelocity += mul(torqueForce.xyz * deltaTime, invInertiaWorld(quat, invInertia));
+    newAngularVelocity = clamp(newAngularVelocity, -maxVelocity, maxVelocity);
+
+    // Apply damping
+    newAngularVelocity *= pow(1.0 - drag, deltaTime);
+    bodyAngularVelBuffer[id] = float4(newAngularVelocity, 1.0);
+
+    //UpdateBodyPosition
+    float4 posTexData = bodyPosBuffer[id];
+    float3 position = posTexData.xyz;
+    bodyPosBuffer[id] = float4(position + newVelocity * deltaTime, 1.0);
+
+    //UpdateBodyQuaternion
+    bodyQuatBuffer[id] = quat_integrate(quat, newAngularVelocity, deltaTime);
+}
