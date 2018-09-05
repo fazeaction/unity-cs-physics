@@ -1,4 +1,4 @@
-# unity-cs-physics.js
+# unity-cs-physics
 compute shaders and physics in Unity
 Credits to:<br>
  schteppe for the physics -> https://github.com/schteppe/gpu-physics.js<br>
