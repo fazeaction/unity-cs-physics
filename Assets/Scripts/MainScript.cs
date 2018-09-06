@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class Main : MonoBehaviour
+public class MainScript : MonoBehaviour
 {
 
     float ySpread = 0.1f;
