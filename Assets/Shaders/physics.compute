@@ -42,7 +42,6 @@ CBUFFER_START(Params)
     float3 cellSize;
     float3 gridPos;
     float3 gridResolution;
-    float2 gridTextureResolution;
     float3 boxSize;
 CBUFFER_END
 
@@ -139,7 +138,7 @@ void UpdateParticlesForces(uint id : SV_DispatchThreadID)
                 float3 neighborCellGridPos = particleGridPos + float3(i,j,k);
 
                 for(int l=0; l<4; l++){
-                    uint neighborCellTexUV = gridPosToGridBuffer(neighborCellGridPos, l, gridResolution, gridTextureResolution);
+                    uint neighborCellTexUV = gridPosToGridBuffer(neighborCellGridPos, l, gridResolution);
                     int neighborIndex = gridBuffer[neighborCellTexUV][l]; // indices are stored incremented by 1
                     float4 neighborPositionAndBodyId = particlePosWorldBuffer[neighborIndex];
                     float3 neighborPosition = neighborPositionAndBodyId.xyz;

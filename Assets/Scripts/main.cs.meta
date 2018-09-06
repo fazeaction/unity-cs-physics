@@ -3,7 +3,16 @@ guid: e367d908a8a39475881b10ea9de5392d
 MonoImporter:
   externalObjects: {}
   serializedVersion: 2
-  defaultReferences: []
+  defaultReferences:
+  - cube: {instanceID: 0}
+  - BodyMesh1: {fileID: 10206, guid: 0000000000000000e000000000000000, type: 0}
+  - BodyMesh2: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+  - particleMesh: {fileID: 4300000, guid: 719633a9b85894f97b51350d6fc96ff0, type: 3}
+  - interactionSphereMesh: {fileID: 1213617783744400, guid: 305ffa1a1d6184c0b93d6a464c7758f2,
+      type: 2}
+  - _material: {fileID: 2100000, guid: 66fa1dc5b51b5461aa7bf82a36186d08, type: 2}
+  - _material2: {fileID: 2100000, guid: 99b158646407947a1bdb87fcf8db395a, type: 2}
+  - _compute: {fileID: 7200000, guid: f4f6bd3e4b7af4583ace2f805fe9df46, type: 3}
   executionOrder: 0
   icon: {instanceID: 0}
   userData: 

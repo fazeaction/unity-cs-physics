@@ -41,7 +41,7 @@ float3 worldPosToGridPos(float3 particlePos, float3 gridPos, float3 cellSize){
 }
 
 // Convert grid position to UV coord in the grid texture
-uint gridPosToGridBuffer(float3 gridPoss, int subIndex, float3 gridRes, float2 gridTextureRes){
+uint gridPosToGridBuffer(float3 gridPoss, int subIndex, float3 gridRes){
 	gridPoss = clamp(gridPoss, float3(0.0,0.0,0.0), gridRes-float3(0.0,0.0,0.0)); // Keep within limits
 	return floor(gridPoss.x + (gridRes.x * gridPoss.y) + (gridRes.x * gridRes.y * gridPoss.z));
 }
