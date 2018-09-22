@@ -56,21 +56,15 @@ public class MainScript : MonoBehaviour
     ComputeBuffer bodyForceBuffer;
     ComputeBuffer bodyTorqueBuffer;
     ComputeBuffer bodyMassBuffer;
-
     Vector4[] bodyMassArray;
-
-
-    //particles buffers
     ComputeBuffer particlePosLocalBuffer; // (x,y,z,bodyId)
     Vector4[] particlePosLocalArray;
     ComputeBuffer particlePosRelativeBuffer; // (x,y,z,bodyId)
-
     ComputeBuffer particlePosWorldBuffer; // (x,y,z,bodyId)
     ComputeBuffer particleVelBuffer; // (x,y,z,1)
     ComputeBuffer particleForceBuffer; // (x,y,z,1)
     ComputeBuffer particleTorqueBuffer; // (x,y,z,1)
-
-    ComputeBuffer colorBuffer; // (x,y,z,bodyId)
+    ComputeBuffer colorBuffer;
     Vector3[] colorArray;
 
     // Broadphase
@@ -129,65 +123,24 @@ public class MainScript : MonoBehaviour
         }
     }
 
-    [SerializeField] float _stiffness = 1700;
-    public float stiffness
-    {
-        get { return _stiffness; }
-        set { _stiffness = value; }
-    }
-
-    [SerializeField] float _damping = 6;
-    public float damping
-    {
-        get { return _damping; }
-        set { _damping = value; }
-    }
-
-    [SerializeField] float _friction = 2;
-    public float friction
-    {
-        get { return _friction; }
-        set { _friction = value; }
-    }
-
-    [SerializeField] float _drag = .3f;
-    public float drag
-    {
-        get { return _drag; }
-        set { _drag = value; }
-    }
-
-    [SerializeField] float _sphereRadius = .2f;
-    public float sphereRadius
-    {
-        get { return _sphereRadius; }
-        set { _sphereRadius = value; }
-    }
-
-    [SerializeField] Vector3 _spherePosition = new Vector3();
-    public Vector3 spherePosition
-    {
-        get { return _spherePosition; }
-        set { _spherePosition = value; }
-    }
+    public float stiffness = 1700;
+    public float damping = 6;
+    public float friction = 2;
+    public float drag = .3f;
+    public float sphereRadius;
+    public Vector3 spherePosition = new Vector3();
 
     int maxParticles;
     int maxBodies;
-
     float time = 0;
     float fixedTime = 0;
-    private Vector3 broadphasePosition = new Vector3(0, 0, 0);
-    private Vector3 broadphaseResolution = new Vector3(64, 64, 64);
-    Vector2 broadphaseGridZTiling = new Vector2(0.0f, 0.0f);
-
 
     public Vector3 gravity = new Vector3(0, -2, 0);
     Vector3 maxVelocity = new Vector3(100000, 100000, 100000);
     public int maxSubSteps = 1;
     float accumulator = 0;
     float interpolationValue = 0;
-    float gridBufferW;
-    float gridBufferH;
+    int [] _tempInt = { 0, 0 }; // used to avoid GC memory allocation
 
     void Start()
     {
@@ -260,9 +213,6 @@ public class MainScript : MonoBehaviour
         particleTorqueBuffer = new ComputeBuffer(maxParticles, 4 * sizeof(float));
         particlePosLocalArray = new Vector4[maxParticles];
 
-        gridBufferW = (2 * broadphaseResolution.x * broadphaseGridZTiling.x);
-        gridBufferH = (2 * broadphaseResolution.z * broadphaseGridZTiling.y);
-
         gridBuffer = new ComputeBuffer((int)(numParticles * numParticles * numParticles), 4 * sizeof(float));
 
         // Add particles to bodies
@@ -290,8 +240,8 @@ public class MainScript : MonoBehaviour
         particlePosLocalBuffer.SetData(particlePosLocalArray);
 
         interactionSphereMeshInstance = Instantiate(interactionSphereMesh);
-        interactionSphereMeshInstance.transform.localScale = new Vector3(_sphereRadius * 2 * 0.5f, _sphereRadius * 2 * 0.5f, _sphereRadius * 2 * 0.5f);
-        //interactionSphereMeshInstance.transform.localScale = new Vector3(_sphereRadius*2.0f,_sphereRadius*2.0f,_sphereRadius*2.0f);
+        interactionSphereMeshInstance.transform.localScale = new Vector3(sphereRadius, sphereRadius, sphereRadius);
+        //interactionSphereMeshInstance.transform.localScale = new Vector3(sphereRadius*0.5f,sphereRadius*0.5f,sphereRadius*0.5f);
         interactionSphereMeshInstance.SetActive(true);
 
         _drawArgsBuffer = new ComputeBuffer(1, 5 * sizeof(uint), ComputeBufferType.IndirectArguments);
@@ -371,7 +321,7 @@ public class MainScript : MonoBehaviour
         _compute.SetFloat("time", time);
 
         _compute.SetFloats("interactionSpherePos", new float[] { spherePosition.x, spherePosition.y, spherePosition.z });
-        _compute.SetFloat("interactionSphereRadius", _sphereRadius);
+        _compute.SetFloat("interactionSphereRadius", sphereRadius);
 
         _compute.SetFloats("gravity", new float[] { gravity.x, gravity.y, gravity.z });
         _compute.SetFloats("maxVelocity", new float[] { maxVelocity.x, maxVelocity.y, maxVelocity.z });
@@ -409,7 +359,7 @@ public class MainScript : MonoBehaviour
         //float y = 0.2f*(Mathf.Cos(1 * 2 * fixedTime)+0.5f) + introSweepPos;
         float z = 0.22f * Mathf.Cos(1 * 2.1f * fixedTime) + introSweepPos;
         interactionSphereMeshInstance.transform.position = new Vector3(x, y, z);
-        _spherePosition.Set(x, y, z);
+        spherePosition.Set(x, y, z);
         fixedTime += fixedTimeStep;
         step(deltaTime);
     }
@@ -458,7 +408,8 @@ public class MainScript : MonoBehaviour
     void updateParticles()
     {
         var kernel = _compute.FindKernel("UpdateParticles");
-        _compute.SetInts("Iteration", new int[] { numParticles, numParticles });
+        _tempInt[0] = numParticles; _tempInt[1] = numParticles;
+        _compute.SetInts("Iteration", _tempInt);
         _compute.SetBuffer(kernel, "particlePosLocalBuffer", particlePosLocalBuffer);
         _compute.SetBuffer(kernel, "bodyPosBuffer", bodyPosBuffer);
         _compute.SetBuffer(kernel, "bodyQuatBuffer", bodyQuatBuffer);
@@ -473,7 +424,8 @@ public class MainScript : MonoBehaviour
     void clearGrid()
     {
         var kernel = _compute.FindKernel("ClearGrid");
-        _compute.SetInts("Iteration", new int[] { numParticles, numParticles * numParticles });
+        _tempInt[0] = numParticles; _tempInt[1] = numParticles * numParticles;
+        _compute.SetInts("Iteration", _tempInt);
         _compute.SetBuffer(kernel, "gridBuffer", gridBuffer);
         _compute.Dispatch(kernel, ThreadGroupCount3, 1, 1);
 
@@ -482,7 +434,8 @@ public class MainScript : MonoBehaviour
     void updateGrid()
     {
         var kernel = _compute.FindKernel("UpdateGrid");
-        _compute.SetInts("Iteration", new int[] { numParticles, numParticles * numParticles });
+         _tempInt[0] = numParticles; _tempInt[1] = numParticles;
+        _compute.SetInts("Iteration", _tempInt);
         _compute.SetBuffer(kernel, "particlePosWorldBuffer", particlePosWorldBuffer);
         _compute.SetBuffer(kernel, "gridBuffer", gridBuffer);
 
@@ -493,7 +446,8 @@ public class MainScript : MonoBehaviour
     void updateParticlesForces()
     {
         var kernel = _compute.FindKernel("UpdateParticlesForces");
-        _compute.SetInts("Iteration", new int[] { numParticles, numParticles });
+         _tempInt[0] = numParticles; _tempInt[1] = numParticles;
+        _compute.SetInts("Iteration", _tempInt);
         _compute.SetBuffer(kernel, "particlePosWorldBuffer", particlePosWorldBuffer);
         _compute.SetBuffer(kernel, "particlePosRelativeBuffer", particlePosRelativeBuffer);
         _compute.SetBuffer(kernel, "particleVelocityBuffer", particleVelBuffer);
@@ -509,7 +463,8 @@ public class MainScript : MonoBehaviour
     void addParticlesForcesToBody()
     {
         var kernel = _compute.FindKernel("AddParticlesForcesToBody");
-        _compute.SetInts("Iteration", new int[] { numBodies, numBodies });
+        _tempInt[0] = numBodies; _tempInt[1] = numBodies;
+        _compute.SetInts("Iteration", _tempInt);
         _compute.SetBuffer(kernel, "particleForceBuffer", particleForceBuffer);
         _compute.SetBuffer(kernel, "bodyForceBuffer", bodyForceBuffer);
 
@@ -523,7 +478,8 @@ public class MainScript : MonoBehaviour
     void updateBody()
     {
         var kernel = _compute.FindKernel("UpdateBody");
-        _compute.SetInts("Iteration", new int[] { numBodies, numBodies });
+        _tempInt[0] = numBodies; _tempInt[1] = numBodies;
+        _compute.SetInts("Iteration", _tempInt);
         _compute.SetFloat("linearAngular", 0.0f);
 
         _compute.SetBuffer(kernel, "bodyQuatBuffer", bodyQuatBuffer);
