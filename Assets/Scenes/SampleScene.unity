@@ -326,7 +326,7 @@ MonoBehaviour:
     type: 2}
   bodyMaterial: {fileID: 2100000, guid: 66fa1dc5b51b5461aa7bf82a36186d08, type: 2}
   particleMaterial: {fileID: 2100000, guid: 99b158646407947a1bdb87fcf8db395a, type: 2}
-  _compute: {fileID: 7200000, guid: f4f6bd3e4b7af4583ace2f805fe9df46, type: 3}
+  compute: {fileID: 7200000, guid: f4f6bd3e4b7af4583ace2f805fe9df46, type: 3}
   _fixedTimeStep: 0.008333334
   stiffness: 1700
   damping: 6
@@ -363,7 +363,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1573723717
 Transform:
   m_ObjectHideFlags: 0

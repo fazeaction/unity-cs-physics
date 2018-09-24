@@ -37,12 +37,12 @@ int _gridIndex(float3 particlePos, float3 gridPos, float3 cellSize,float3 gridRe
 }
 
 float3 worldPosToGridPos(float3 particlePos, float3 gridPos, float3 cellSize){
-	return floor((particlePos - gridPos)/(cellSize*1.0));
+	return floor((particlePos - gridPos)/(cellSize));
 }
 
 // Convert grid position to UV coord in the grid texture
-uint gridPosToGridBuffer(float3 gridPoss, int subIndex, float3 gridRes){
-	gridPoss = clamp(gridPoss, float3(0.0,0.0,0.0), gridRes-float3(0.0,0.0,0.0)); // Keep within limits
+uint gridPosToGridBuffer(float3 gridPoss, float3 gridRes){
+	gridPoss = clamp(gridPoss, float3(0.0,0.0,0.0), gridRes); // Keep within limits
 	return floor(gridPoss.x + (gridRes.x * gridPoss.y) + (gridRes.x * gridRes.y * gridPoss.z));
 }
 

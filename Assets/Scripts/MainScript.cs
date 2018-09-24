@@ -37,11 +37,11 @@ public class MainScript : MonoBehaviour
     }
     public Material bodyMaterial;
     public Material particleMaterial;
-    MaterialPropertyBlock _props;
-    MaterialPropertyBlock _props2;
-    MaterialPropertyBlock _props3;
+    MaterialPropertyBlock propsCylinder;
+    MaterialPropertyBlock propsCubes;
+    MaterialPropertyBlock propsParticles;
 
-    public ComputeShader _compute;
+    public ComputeShader compute;
     ComputeBuffer _drawArgsBuffer;
     ComputeBuffer _drawArgsBuffer2;
     ComputeBuffer _drawArgsBuffer3;
@@ -59,11 +59,11 @@ public class MainScript : MonoBehaviour
     Vector4[] bodyMassArray;
     ComputeBuffer particlePosLocalBuffer; // (x,y,z,bodyId)
     Vector4[] particlePosLocalArray;
-    ComputeBuffer particlePosRelativeBuffer; // (x,y,z,bodyId)
-    ComputeBuffer particlePosWorldBuffer; // (x,y,z,bodyId)
-    ComputeBuffer particleVelBuffer; // (x,y,z,1)
-    ComputeBuffer particleForceBuffer; // (x,y,z,1)
-    ComputeBuffer particleTorqueBuffer; // (x,y,z,1)
+    ComputeBuffer particlePosRelativeBuffer; 
+    ComputeBuffer particlePosWorldBuffer; 
+    ComputeBuffer particleVelBuffer; 
+    ComputeBuffer particleForceBuffer; 
+    ComputeBuffer particleTorqueBuffer; 
     ComputeBuffer colorBuffer;
     Vector3[] colorArray;
 
@@ -139,14 +139,13 @@ public class MainScript : MonoBehaviour
     Vector3 maxVelocity = new Vector3(100000, 100000, 100000);
     public int maxSubSteps = 1;
     float accumulator = 0;
-    float interpolationValue = 0;
     int [] _tempInt = { 0, 0 }; // used to avoid GC memory allocation
 
     void Start()
     {
-        _props = new MaterialPropertyBlock();
-        _props2 = new MaterialPropertyBlock();
-        _props3 = new MaterialPropertyBlock();
+        propsCylinder = new MaterialPropertyBlock();
+        propsCubes = new MaterialPropertyBlock();
+        propsParticles = new MaterialPropertyBlock();
 
         radius = 1.0f / numParticles * 0.5f;
         boxSize = new Vector3(0.25f * 0.9f, 7, 0.25f * 0.9f);
@@ -253,20 +252,20 @@ public class MainScript : MonoBehaviour
         _drawArgsBuffer3 = new ComputeBuffer(1, 5 * sizeof(uint), ComputeBufferType.IndirectArguments);
         _drawArgsBuffer3.SetData(new uint[5] { particleMesh.GetIndexCount(0), (uint)maxParticles, 0, 0, 0 });
 
-        _props.SetVector("radius", new Vector3(2 * radius, 4 * radius, 2 * radius));
-        _props.SetBuffer("_TransformBuffer", bodyPosBuffer);
-        _props.SetBuffer("_QuatBuffer", bodyQuatBuffer);
-        _props.SetBuffer("Color", colorBuffer);
+        propsCylinder.SetVector("radius", new Vector3(2 * radius, 4 * radius, 2 * radius));
+        propsCylinder.SetBuffer("_TransformBuffer", bodyPosBuffer);
+        propsCylinder.SetBuffer("_QuatBuffer", bodyQuatBuffer);
+        propsCylinder.SetBuffer("Color", colorBuffer);
 
-        _props2.SetVector("radius", new Vector3(4 * radius, 2 * radius, 4 * radius));
-        //_props2.SetVector("radius", new Vector3(2*radius, 4*radius,2*radius));
-        _props2.SetBuffer("_TransformBuffer", bodyPosBuffer);
-        _props2.SetBuffer("_QuatBuffer", bodyQuatBuffer);
-        _props2.SetBuffer("Color", colorBuffer);
+        propsCubes.SetVector("radius", new Vector3(4 * radius, 2 * radius, 4 * radius));
+        //propsCubes.SetVector("radius", new Vector3(2*radius, 4*radius,2*radius));
+        propsCubes.SetBuffer("_TransformBuffer", bodyPosBuffer);
+        propsCubes.SetBuffer("_QuatBuffer", bodyQuatBuffer);
+        propsCubes.SetBuffer("Color", colorBuffer);
 
-        _props3.SetVector("radius", new Vector3(2 * radius, 2 * radius, 2 * radius));
-        _props3.SetBuffer("_TransformBuffer", particlePosWorldBuffer);
-        _props3.SetBuffer("_QuatBuffer", bodyQuatBuffer);
+        propsParticles.SetVector("radius", new Vector3(2 * radius, 2 * radius, 2 * radius));
+        propsParticles.SetBuffer("_TransformBuffer", particlePosWorldBuffer);
+        propsParticles.SetBuffer("_QuatBuffer", bodyQuatBuffer);
     }
 
     void calculateBoxInertia(ref Vector3 inertia, float mass, Vector3 extents)
@@ -306,25 +305,25 @@ public class MainScript : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        _compute.SetInts("Iteration", new int[] { numParticles, numParticles });
-        _compute.SetFloats("cellSize", new float[] { radius * 2, radius * 2, radius * 2 });
-        _compute.SetFloats("gridPos", new float[] { gridPosition.x, gridPosition.y, gridPosition.z });
-        _compute.SetFloats("gridResolution", new float[] { gridResolution.x, gridResolution.y, gridResolution.z });
-        _compute.SetFloats("boxSize", new float[] { boxSize.x, boxSize.y, boxSize.z });
-        _compute.SetFloat("friction", friction);
-        _compute.SetFloat("drag", drag);
-        _compute.SetFloat("stiffness", stiffness);
-        _compute.SetFloat("damping", damping);
-        _compute.SetFloat("radius", radius);
+        compute.SetInts("Iteration", new int[] { numParticles, numParticles });
+        compute.SetFloats("cellSize", new float[] { radius * 2, radius * 2, radius * 2 });
+        compute.SetFloats("gridPos", new float[] { gridPosition.x, gridPosition.y, gridPosition.z });
+        compute.SetFloats("gridResolution", new float[] { gridResolution.x, gridResolution.y, gridResolution.z });
+        compute.SetFloats("boxSize", new float[] { boxSize.x, boxSize.y, boxSize.z });
+        compute.SetFloat("friction", friction);
+        compute.SetFloat("drag", drag);
+        compute.SetFloat("stiffness", stiffness);
+        compute.SetFloat("damping", damping);
+        compute.SetFloat("radius", radius);
 
-        _compute.SetFloat("deltaTime", fixedTimeStep);
-        _compute.SetFloat("time", time);
+        compute.SetFloat("deltaTime", fixedTimeStep);
+        compute.SetFloat("time", time);
 
-        _compute.SetFloats("interactionSpherePos", new float[] { spherePosition.x, spherePosition.y, spherePosition.z });
-        _compute.SetFloat("interactionSphereRadius", sphereRadius);
+        compute.SetFloats("interactionSpherePos", new float[] { spherePosition.x, spherePosition.y, spherePosition.z });
+        compute.SetFloat("interactionSphereRadius", sphereRadius);
 
-        _compute.SetFloats("gravity", new float[] { gravity.x, gravity.y, gravity.z });
-        _compute.SetFloats("maxVelocity", new float[] { maxVelocity.x, maxVelocity.y, maxVelocity.z });
+        compute.SetFloats("gravity", new float[] { gravity.x, gravity.y, gravity.z });
+        compute.SetFloats("maxVelocity", new float[] { maxVelocity.x, maxVelocity.y, maxVelocity.z });
 
         updatePhysics();
 
@@ -332,23 +331,22 @@ public class MainScript : MonoBehaviour
         {
             Graphics.DrawMeshInstancedIndirect(
                 BodyMesh1, 0, bodyMaterial, DrawMeshBounds,
-                _drawArgsBuffer, 0, _props
+                _drawArgsBuffer, 0, propsCylinder
             );
             Graphics.DrawMeshInstancedIndirect(
                 BodyMesh2, 0, bodyMaterial, DrawMeshBounds,
-                _drawArgsBuffer2, 0, _props2
+                _drawArgsBuffer2, 0, propsCubes
             );
         }
         else
         {
             Graphics.DrawMeshInstancedIndirect(
             particleMesh, 0, particleMaterial, DrawMeshBounds,
-            _drawArgsBuffer3, 0, _props3
+            _drawArgsBuffer3, 0, propsParticles
             );
         }
     }
 
-    float prevTime, prevSpawnedBody = 0;
     void updatePhysics()
     {
 
@@ -390,7 +388,6 @@ public class MainScript : MonoBehaviour
             substeps++;
         }
 
-        interpolationValue = tempAccumulator / fixedTimeStep;
         time += deltaTime;
         accumulator = tempAccumulator;
     }
@@ -407,92 +404,92 @@ public class MainScript : MonoBehaviour
 
     void updateParticles()
     {
-        var kernel = _compute.FindKernel("UpdateParticles");
+        var kernel = compute.FindKernel("UpdateParticles");
         _tempInt[0] = numParticles; _tempInt[1] = numParticles;
-        _compute.SetInts("Iteration", _tempInt);
-        _compute.SetBuffer(kernel, "particlePosLocalBuffer", particlePosLocalBuffer);
-        _compute.SetBuffer(kernel, "bodyPosBuffer", bodyPosBuffer);
-        _compute.SetBuffer(kernel, "bodyQuatBuffer", bodyQuatBuffer);
-        _compute.SetBuffer(kernel, "particlePosWorldBuffer", particlePosWorldBuffer);
-        _compute.SetBuffer(kernel, "particlePosRelativeBuffer", particlePosRelativeBuffer);
-        _compute.SetBuffer(kernel, "bodyVelBuffer", bodyVelBuffer);
-        _compute.SetBuffer(kernel, "bodyAngularVelBuffer", bodyAngularVelBuffer);
-        _compute.SetBuffer(kernel, "particleVelocityBuffer", particleVelBuffer);
-        _compute.Dispatch(kernel, ThreadGroupCount2, 1, 1);
+        compute.SetInts("Iteration", _tempInt);
+        compute.SetBuffer(kernel, "particlePosLocalBuffer", particlePosLocalBuffer);
+        compute.SetBuffer(kernel, "bodyPosBuffer", bodyPosBuffer);
+        compute.SetBuffer(kernel, "bodyQuatBuffer", bodyQuatBuffer);
+        compute.SetBuffer(kernel, "particlePosWorldBuffer", particlePosWorldBuffer);
+        compute.SetBuffer(kernel, "particlePosRelativeBuffer", particlePosRelativeBuffer);
+        compute.SetBuffer(kernel, "bodyVelBuffer", bodyVelBuffer);
+        compute.SetBuffer(kernel, "bodyAngularVelBuffer", bodyAngularVelBuffer);
+        compute.SetBuffer(kernel, "particleVelocityBuffer", particleVelBuffer);
+        compute.Dispatch(kernel, ThreadGroupCount2, 1, 1);
     }
 
     void clearGrid()
     {
-        var kernel = _compute.FindKernel("ClearGrid");
+        var kernel = compute.FindKernel("ClearGrid");
         _tempInt[0] = numParticles; _tempInt[1] = numParticles * numParticles;
-        _compute.SetInts("Iteration", _tempInt);
-        _compute.SetBuffer(kernel, "gridBuffer", gridBuffer);
-        _compute.Dispatch(kernel, ThreadGroupCount3, 1, 1);
+        compute.SetInts("Iteration", _tempInt);
+        compute.SetBuffer(kernel, "gridBuffer", gridBuffer);
+        compute.Dispatch(kernel, ThreadGroupCount3, 1, 1);
 
     }
 
     void updateGrid()
     {
-        var kernel = _compute.FindKernel("UpdateGrid");
+        var kernel = compute.FindKernel("UpdateGrid");
          _tempInt[0] = numParticles; _tempInt[1] = numParticles;
-        _compute.SetInts("Iteration", _tempInt);
-        _compute.SetBuffer(kernel, "particlePosWorldBuffer", particlePosWorldBuffer);
-        _compute.SetBuffer(kernel, "gridBuffer", gridBuffer);
+        compute.SetInts("Iteration", _tempInt);
+        compute.SetBuffer(kernel, "particlePosWorldBuffer", particlePosWorldBuffer);
+        compute.SetBuffer(kernel, "gridBuffer", gridBuffer);
 
-        _compute.Dispatch(kernel, ThreadGroupCount2, 1, 1);
+        compute.Dispatch(kernel, ThreadGroupCount2, 1, 1);
 
     }
 
     void updateParticlesForces()
     {
-        var kernel = _compute.FindKernel("UpdateParticlesForces");
+        var kernel = compute.FindKernel("UpdateParticlesForces");
          _tempInt[0] = numParticles; _tempInt[1] = numParticles;
-        _compute.SetInts("Iteration", _tempInt);
-        _compute.SetBuffer(kernel, "particlePosWorldBuffer", particlePosWorldBuffer);
-        _compute.SetBuffer(kernel, "particlePosRelativeBuffer", particlePosRelativeBuffer);
-        _compute.SetBuffer(kernel, "particleVelocityBuffer", particleVelBuffer);
-        _compute.SetBuffer(kernel, "bodyAngularVelBuffer", bodyAngularVelBuffer);
-        _compute.SetBuffer(kernel, "gridBuffer", gridBuffer);
-        _compute.SetBuffer(kernel, "particleForceBuffer", particleForceBuffer);
+        compute.SetInts("Iteration", _tempInt);
+        compute.SetBuffer(kernel, "particlePosWorldBuffer", particlePosWorldBuffer);
+        compute.SetBuffer(kernel, "particlePosRelativeBuffer", particlePosRelativeBuffer);
+        compute.SetBuffer(kernel, "particleVelocityBuffer", particleVelBuffer);
+        compute.SetBuffer(kernel, "bodyAngularVelBuffer", bodyAngularVelBuffer);
+        compute.SetBuffer(kernel, "gridBuffer", gridBuffer);
+        compute.SetBuffer(kernel, "particleForceBuffer", particleForceBuffer);
 
-        _compute.SetBuffer(kernel, "particleTorqueBuffer", particleTorqueBuffer);
+        compute.SetBuffer(kernel, "particleTorqueBuffer", particleTorqueBuffer);
 
-        _compute.Dispatch(kernel, ThreadGroupCount2, 1, 1);
+        compute.Dispatch(kernel, ThreadGroupCount2, 1, 1);
     }
 
     void addParticlesForcesToBody()
     {
-        var kernel = _compute.FindKernel("AddParticlesForcesToBody");
+        var kernel = compute.FindKernel("AddParticlesForcesToBody");
         _tempInt[0] = numBodies; _tempInt[1] = numBodies;
-        _compute.SetInts("Iteration", _tempInt);
-        _compute.SetBuffer(kernel, "particleForceBuffer", particleForceBuffer);
-        _compute.SetBuffer(kernel, "bodyForceBuffer", bodyForceBuffer);
+        compute.SetInts("Iteration", _tempInt);
+        compute.SetBuffer(kernel, "particleForceBuffer", particleForceBuffer);
+        compute.SetBuffer(kernel, "bodyForceBuffer", bodyForceBuffer);
 
-        _compute.SetBuffer(kernel, "particleTorqueBuffer", particleTorqueBuffer);
-        _compute.SetBuffer(kernel, "particlePosRelativeBuffer", particlePosRelativeBuffer);
-        _compute.SetBuffer(kernel, "bodyTorqueBuffer", bodyTorqueBuffer);
+        compute.SetBuffer(kernel, "particleTorqueBuffer", particleTorqueBuffer);
+        compute.SetBuffer(kernel, "particlePosRelativeBuffer", particlePosRelativeBuffer);
+        compute.SetBuffer(kernel, "bodyTorqueBuffer", bodyTorqueBuffer);
 
-        _compute.Dispatch(kernel, ThreadGroupCount, 1, 1);
+        compute.Dispatch(kernel, ThreadGroupCount, 1, 1);
     }
 
     void updateBody()
     {
-        var kernel = _compute.FindKernel("UpdateBody");
+        var kernel = compute.FindKernel("UpdateBody");
         _tempInt[0] = numBodies; _tempInt[1] = numBodies;
-        _compute.SetInts("Iteration", _tempInt);
-        _compute.SetFloat("linearAngular", 0.0f);
+        compute.SetInts("Iteration", _tempInt);
+        compute.SetFloat("linearAngular", 0.0f);
 
-        _compute.SetBuffer(kernel, "bodyQuatBuffer", bodyQuatBuffer);
-        _compute.SetBuffer(kernel, "bodyForceBuffer", bodyForceBuffer);
-        _compute.SetBuffer(kernel, "bodyVelBuffer", bodyVelBuffer);
-        _compute.SetBuffer(kernel, "bodyMassBuffer", bodyMassBuffer);
+        compute.SetBuffer(kernel, "bodyQuatBuffer", bodyQuatBuffer);
+        compute.SetBuffer(kernel, "bodyForceBuffer", bodyForceBuffer);
+        compute.SetBuffer(kernel, "bodyVelBuffer", bodyVelBuffer);
+        compute.SetBuffer(kernel, "bodyMassBuffer", bodyMassBuffer);
 
-        _compute.SetBuffer(kernel, "bodyTorqueBuffer", bodyTorqueBuffer);
-        _compute.SetBuffer(kernel, "bodyAngularVelBuffer", bodyAngularVelBuffer);
+        compute.SetBuffer(kernel, "bodyTorqueBuffer", bodyTorqueBuffer);
+        compute.SetBuffer(kernel, "bodyAngularVelBuffer", bodyAngularVelBuffer);
 
-        _compute.SetBuffer(kernel, "bodyPosBuffer", bodyPosBuffer);
+        compute.SetBuffer(kernel, "bodyPosBuffer", bodyPosBuffer);
 
-        _compute.Dispatch(kernel, ThreadGroupCount, 1, 1);
+        compute.Dispatch(kernel, ThreadGroupCount, 1, 1);
     }
 
     int addBody(float x, float y, float z, float qx, float qy, float qz, float qw, float mass, float inertiaX, float inertiaY, float inertiaZ)

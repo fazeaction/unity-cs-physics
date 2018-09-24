@@ -138,7 +138,7 @@ void UpdateParticlesForces(uint id : SV_DispatchThreadID)
                 float3 neighborCellGridPos = particleGridPos + float3(i,j,k);
 
                 for(int l=0; l<4; l++){
-                    uint neighborCellTexUV = gridPosToGridBuffer(neighborCellGridPos, l, gridResolution);
+                    uint neighborCellTexUV = gridPosToGridBuffer(neighborCellGridPos, gridResolution);
                     int neighborIndex = gridBuffer[neighborCellTexUV][l]; // indices are stored incremented by 1
                     float4 neighborPositionAndBodyId = particlePosWorldBuffer[neighborIndex];
                     float3 neighborPosition = neighborPositionAndBodyId.xyz;
